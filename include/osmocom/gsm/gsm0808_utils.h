@@ -21,9 +21,25 @@
 
 #include <sys/socket.h>
 
+#include <osmocom/gsm/protocol/gsm_08_08.h>
+
 /* Encode AoIP transport address element */
 struct msgb *gsm0808_enc_aoip_trasp_addr(struct sockaddr_storage *ss);
 
 /* Decode AoIP transport address element */
 struct sockaddr_storage *gsm0808_dec_aoip_trasp_addr(const void *ctx,
 						     struct msgb *msg);
+
+/* Encode Speech Codec element */
+struct msgb *gsm0808_enc_speech_codec(struct gsm0808_speech_codec *sc);
+
+/* Decode Speech Codec element */
+struct gsm0808_speech_codec *gsm0808_dec_speech_codec(const void *ctx,
+						      struct msgb *msg);
+
+/* Encode Speech Codec list */
+struct msgb *gsm0808_enc_speech_codec_list(struct llist_head *scl);
+
+/* Decode Speech Codec list */
+struct llist_head *gsm0808_dec_speech_codec_list(const void *ctx,
+						 struct msgb *msg);

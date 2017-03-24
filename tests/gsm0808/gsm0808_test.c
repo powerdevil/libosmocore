@@ -303,6 +303,152 @@ static void test_enc_dec_aoip_trasp_addr_v6(const void *ctx)
 	msgb_free(msg);
 }
 
+static void test_gsm0808_enc_dec_speech_codec(const void *ctx)
+{
+	struct gsm0808_speech_codec enc_sc;
+	struct gsm0808_speech_codec *dec_sc;
+	struct msgb *msg;
+
+	memset(&enc_sc, 0, sizeof(enc_sc));
+	enc_sc.fi = true;
+	enc_sc.pt = true;
+	enc_sc.type = 0x05;
+
+	msg = gsm0808_enc_speech_codec(&enc_sc);
+	OSMO_ASSERT(msg);
+	dec_sc = gsm0808_dec_speech_codec(ctx, msg);
+
+	OSMO_ASSERT(memcmp(&enc_sc, dec_sc, sizeof(enc_sc)) == 0);
+
+	talloc_free(dec_sc);
+	msgb_free(msg);
+}
+
+static void test_gsm0808_enc_dec_speech_codec_ext_with_cfg(const void *ctx)
+{
+	struct gsm0808_speech_codec enc_sc;
+	struct gsm0808_speech_codec *dec_sc;
+	struct msgb *msg;
+
+	enc_sc.pi = true;
+	enc_sc.tf = true;
+	enc_sc.type = 0xab;
+	enc_sc.type_extended = true;
+	enc_sc.cfg_present = true;
+	enc_sc.cfg = 0xcdef;
+
+	msg = gsm0808_enc_speech_codec(&enc_sc);
+	OSMO_ASSERT(msg);
+	dec_sc = gsm0808_dec_speech_codec(ctx, msg);
+
+	OSMO_ASSERT(memcmp(&enc_sc, dec_sc, sizeof(enc_sc)) == 0);
+
+	talloc_free(dec_sc);
+	msgb_free(msg);
+}
+
+static void test_gsm0808_enc_dec_speech_codec_ext(const void *ctx)
+{
+	struct gsm0808_speech_codec enc_sc;
+	struct gsm0808_speech_codec *dec_sc;
+	struct msgb *msg;
+
+	enc_sc.fi = true;
+	enc_sc.tf = true;
+	enc_sc.type = 0xf2;
+	enc_sc.type_extended = true;
+
+	msg = gsm0808_enc_speech_codec(&enc_sc);
+	OSMO_ASSERT(msg);
+	dec_sc = gsm0808_dec_speech_codec(ctx, msg);
+
+	OSMO_ASSERT(memcmp(&enc_sc, dec_sc, sizeof(enc_sc)) == 0);
+
+	talloc_free(dec_sc);
+	msgb_free(msg);
+}
+
+static bool speech_codec_cmp(struct gsm0808_speech_codec *a,
+			     struct gsm0808_speech_codec *b)
+{
+	if (a->fi != b->fi)
+		return false;
+	if (a->pi != b->pi)
+		return false;
+	if (a->pt != b->pt)
+		return false;
+	if (a->tf != b->tf)
+		return false;
+	if (a->type != b->type)
+		return false;
+	if (a->cfg != b->cfg)
+		return false;
+	if (a->type_extended != b->type_extended)
+		return false;
+	if (a->cfg_present != b->cfg_present)
+		return false;
+
+	return true;
+}
+
+static void test_gsm0808_enc_dec_speech_codec_list(const void *ctx)
+{
+	struct gsm0808_speech_codec enc_sc1;
+	struct gsm0808_speech_codec enc_sc2;
+	struct gsm0808_speech_codec enc_sc3;
+	struct msgb *msg;
+	struct llist_head sc_list;
+	struct llist_head *sc_list_decoded;
+	struct gsm0808_speech_codec *sc;
+
+	INIT_LLIST_HEAD(&sc_list);
+
+	memset(&enc_sc1, 0, sizeof(enc_sc1));
+	enc_sc1.pi = true;
+	enc_sc1.tf = true;
+	enc_sc1.type = 0xab;
+	enc_sc1.type_extended = true;
+	enc_sc1.cfg_present = true;
+	enc_sc1.cfg = 0xcdef;
+
+	memset(&enc_sc2, 0, sizeof(enc_sc2));
+	enc_sc2.fi = true;
+	enc_sc2.pt = true;
+	enc_sc2.type = 0x05;
+
+	memset(&enc_sc3, 0, sizeof(enc_sc3));
+	enc_sc3.fi = true;
+	enc_sc3.tf = true;
+	enc_sc3.type = 0xf2;
+	enc_sc3.type_extended = true;
+
+	llist_add(&enc_sc3.list, &sc_list);
+	llist_add(&enc_sc2.list, &sc_list);
+	llist_add(&enc_sc1.list, &sc_list);
+
+	msg = gsm0808_enc_speech_codec_list(&sc_list);
+	sc_list_decoded = gsm0808_dec_speech_codec_list(ctx, msg);
+	OSMO_ASSERT(msg->len == 0);
+
+	llist_for_each_entry(sc, sc_list_decoded, list) {
+		if(sc->type == 0xab) {
+			OSMO_ASSERT(speech_codec_cmp(&enc_sc1,sc) == true);
+		}
+		else if(sc->type == 0x05) {
+			OSMO_ASSERT(speech_codec_cmp(&enc_sc2,sc) == true);
+		}
+		else if(sc->type == 0xf2) {
+			OSMO_ASSERT(speech_codec_cmp(&enc_sc3,sc) == true);
+		}
+		else {
+			OSMO_ASSERT(false);
+		}
+	}
+
+	talloc_free(sc_list_decoded);
+	msgb_free(msg);
+}
+
 int main(int argc, char **argv)
 {
 	void *ctx;
@@ -325,6 +471,10 @@ int main(int argc, char **argv)
 	test_prepend_dtap();
 	test_enc_dec_aoip_trasp_addr_v4(ctx);
 	test_enc_dec_aoip_trasp_addr_v6(ctx);
+	test_gsm0808_enc_dec_speech_codec(ctx);
+	test_gsm0808_enc_dec_speech_codec_ext(ctx);
+	test_gsm0808_enc_dec_speech_codec_ext_with_cfg(ctx);
+	test_gsm0808_enc_dec_speech_codec_list(ctx);
 
 	printf("Done\n");
 
