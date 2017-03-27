@@ -41,6 +41,47 @@
 		abort();						\
 	}
 
+/* Setup a fake codec list for testing */
+static struct llist_head *setup_codec_list(const void *ctx)
+{
+	struct gsm0808_speech_codec *enc_sc1;
+	struct gsm0808_speech_codec *enc_sc2;
+	struct gsm0808_speech_codec *enc_sc3;
+
+	struct llist_head *sc_list;
+
+	sc_list = talloc_zero(ctx, struct llist_head);
+	enc_sc1 = talloc_zero(sc_list, struct gsm0808_speech_codec);
+	enc_sc2 = talloc_zero(sc_list, struct gsm0808_speech_codec);
+	enc_sc3 = talloc_zero(sc_list, struct gsm0808_speech_codec);
+
+	INIT_LLIST_HEAD(sc_list);
+
+	memset(enc_sc1, 0, sizeof(*enc_sc1));
+	enc_sc1->pi = true;
+	enc_sc1->tf = true;
+	enc_sc1->type = 0xab;
+	enc_sc1->type_extended = true;
+	enc_sc1->cfg_present = true;
+	enc_sc1->cfg = 0xcdef;
+
+	memset(enc_sc2, 0, sizeof(*enc_sc2));
+	enc_sc2->fi = true;
+	enc_sc2->pt = true;
+	enc_sc2->type = 0x05;
+
+	memset(enc_sc3, 0, sizeof(*enc_sc3));
+	enc_sc3->fi = true;
+	enc_sc3->tf = true;
+	enc_sc3->type = 0xf2;
+	enc_sc3->type_extended = true;
+
+	llist_add(&enc_sc3->list, sc_list);
+	llist_add(&enc_sc2->list, sc_list);
+	llist_add(&enc_sc1->list, sc_list);
+
+	return sc_list;
+}
 
 static void test_create_layer3(void)
 {
@@ -56,6 +97,34 @@ static void test_create_layer3(void)
 
 	msg = gsm0808_create_layer3(in_msg, 0x1122, 0x2244, 0x3366, 0x4488);
 	VERIFY(msg, res, ARRAY_SIZE(res));
+	msgb_free(msg);
+	msgb_free(in_msg);
+}
+
+static void test_create_layer3_aoip(const void *ctx)
+{
+	static const uint8_t res[] = {
+		0x00, 0x17, 0x57, 0x05, 0x08, 0x00, 0x77, 0x62,
+		0x83, 0x33, 0x66, 0x44, 0x88, 0x17, 0x01, 0x23,
+		    GSM0808_IE_SPEECH_CODEC_LIST, 0x07, 0x5f, 0xab, 0xcd, 0xef,
+		    0xa5, 0x9f, 0xf2
+	};
+
+	struct msgb *msg, *in_msg;
+	struct llist_head *sc_list;
+	printf("Testing creating Layer3 (AoIP)\n");
+
+	sc_list = setup_codec_list(ctx);
+
+	in_msg = msgb_alloc_headroom(512, 128, "foo");
+	in_msg->l3h = in_msg->data;
+	msgb_v_put(in_msg, 0x23);
+
+	msg =
+	    gsm0808_create_layer3_aoip(in_msg, 0x1122, 0x2244, 0x3366, 0x4488,
+				       sc_list);
+	VERIFY(msg, res, ARRAY_SIZE(res));
+	talloc_free(sc_list);
 	msgb_free(msg);
 	msgb_free(in_msg);
 }
@@ -189,6 +258,44 @@ static void test_create_ass_compl()
 	msgb_free(msg);
 }
 
+static void test_create_ass_compl_aoip(const void *ctx)
+{
+	struct sockaddr_storage ss;
+	struct sockaddr_in sin;
+	struct gsm0808_speech_codec sc;
+	struct llist_head *sc_list;
+	static const uint8_t res[] =
+	    { 0x00, 0x1d, 0x02, 0x15, 0x23, 0x21, 0x42, 0x2c, 0x11, 0x40, 0x22,
+	      GSM0808_IE_AOIP_TRASP_ADDR, 0x06, 0xc0, 0xa8, 0x64, 0x17, 0x04,
+	      0xd2, GSM0808_IE_SPEECH_CODEC, 0x01, 0x9a,
+	      GSM0808_IE_SPEECH_CODEC_LIST, 0x07, 0x5f, 0xab, 0xcd, 0xef, 0xa5,
+	      0x9f, 0xf2 };
+	struct msgb *msg;
+
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(1234);
+	inet_aton("192.168.100.23", &sin.sin_addr);
+
+	memset(&ss, 0, sizeof(ss));
+	memcpy(&ss, &sin, sizeof(sin));
+
+	memset(&sc, 0, sizeof(sc));
+	sc.fi = true;
+	sc.tf = true;
+	sc.type = 0x0a;
+
+	sc_list = setup_codec_list(ctx);
+
+	printf("Testing creating Assignment Complete (AoIP)\n");
+	msg =
+	    gsm0808_create_assignment_completed_aoip(0x23, 0x42, 0x11, 0x22,
+						     &ss, &sc, sc_list);
+	VERIFY(msg, res, ARRAY_SIZE(res));
+	msgb_free(msg);
+	talloc_free(sc_list);
+}
+
 static void test_create_ass_fail()
 {
 	static const uint8_t res1[] = { 0x00, 0x04, 0x03, 0x04, 0x01, 0x23 };
@@ -205,6 +312,32 @@ static void test_create_ass_fail()
 	msg = gsm0808_create_assignment_failure(0x23, &rr_res);
 	VERIFY(msg, res2, ARRAY_SIZE(res2));
 	msgb_free(msg);
+}
+
+static void test_create_ass_fail_aoip(const void *ctx)
+{
+	static const uint8_t res1[] =
+	    { 0x00, 0x0d, 0x03, 0x04, 0x01, 0x23, GSM0808_IE_SPEECH_CODEC_LIST,
+		0x07, 0x5f, 0xab, 0xcd, 0xef, 0xa5, 0x9f, 0xf2 };
+	static const uint8_t res2[] =
+	    { 0x00, 0x0f, 0x03, 0x04, 0x01, 0x23, 0x15, 0x02,
+		GSM0808_IE_SPEECH_CODEC_LIST, 0x07, 0x5f, 0xab,
+		0xcd, 0xef, 0xa5, 0x9f, 0xf2 };
+	uint8_t rr_res = 2;
+	struct msgb *msg;
+	struct llist_head *sc_list;
+
+	sc_list = setup_codec_list(ctx);
+
+	printf("Testing creating Assignment Failure (AoIP)\n");
+	msg = gsm0808_create_assignment_failure_aoip(0x23, NULL, sc_list);
+	VERIFY(msg, res1, ARRAY_SIZE(res1));
+	msgb_free(msg);
+
+	msg = gsm0808_create_assignment_failure_aoip(0x23, &rr_res, sc_list);
+	VERIFY(msg, res2, ARRAY_SIZE(res2));
+	msgb_free(msg);
+	talloc_free(sc_list);
 }
 
 static void test_create_clear_rqst()
@@ -457,6 +590,7 @@ int main(int argc, char **argv)
 
 	printf("Testing generation of GSM0808 messages\n");
 	test_create_layer3();
+	test_create_layer3_aoip(ctx);
 	test_create_reset();
 	test_create_clear_command();
 	test_create_clear_complete();
@@ -465,7 +599,9 @@ int main(int argc, char **argv)
 	test_create_cm_u();
 	test_create_sapi_reject();
 	test_create_ass_compl();
+	test_create_ass_compl_aoip(ctx);
 	test_create_ass_fail();
+	test_create_ass_fail_aoip(ctx);
 	test_create_clear_rqst();
 	test_create_dtap();
 	test_prepend_dtap();
