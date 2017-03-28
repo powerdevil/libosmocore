@@ -43,3 +43,10 @@ struct msgb *gsm0808_enc_speech_codec_list(struct llist_head *scl);
 /* Decode Speech Codec list */
 struct llist_head *gsm0808_dec_speech_codec_list(const void *ctx,
 						 struct msgb *msg);
+
+/* Encode Channel Type element */
+struct msgb *gsm0808_enc_channel_type(struct gsm0808_channel_type *ct);
+
+/* Decode Channel Type element */
+struct gsm0808_channel_type *gsm0808_dec_channel_type(const void *ctx,
+						      struct msgb *msg);

@@ -31,6 +31,8 @@
 #define IP_PORT_LEN 2
 
 #define SPEECH_CODEC_ELEMENT_MAXLEN 4
+#define CHANNEL_TYPE_ELEMENT_MAXLEN 11
+#define CHANNEL_TYPE_ELEMENT_MINLEN 3
 
 /* Encode AoIP transport address element */
 struct msgb *gsm0808_enc_aoip_trasp_addr(struct sockaddr_storage *ss)
@@ -273,4 +275,70 @@ struct llist_head *gsm0808_dec_speech_codec_list(const void *ctx,
 	}
 
 	return scl;
+}
+
+/* Encode Channel Type element */
+struct msgb *gsm0808_enc_channel_type(struct gsm0808_channel_type *ct)
+{
+	struct msgb *msg;
+	unsigned int i;
+	uint8_t byte;
+
+	OSMO_ASSERT(ct);
+	OSMO_ASSERT(ct->perm_spch_len <= CHANNEL_TYPE_ELEMENT_MAXLEN-2);
+
+	/* FIXME: Implement encoding support for Data
+	 * and Speech + CTM Text Telephony */
+	if ((ct->ch_indctr & 0x0f) != GSM0808_CHAN_SPEECH
+	    && (ct->ch_indctr & 0x0f) != GSM0808_CHAN_SIGN)
+		return NULL;
+
+	msg = msgb_alloc(CHANNEL_TYPE_ELEMENT_MAXLEN, "Channel Type Element");
+	if (!msg)
+		return NULL;
+
+	msgb_put_u8(msg, ct->ch_indctr & 0x0f);
+	msgb_put_u8(msg, ct->ch_rate_type);
+
+	for (i = 0; i < ct->perm_spch_len; i++) {
+		byte = ct->perm_spch[i];
+
+		if (i < ct->perm_spch_len - 1)
+			byte |= 0x80;
+		msgb_put_u8(msg, byte);
+	}
+
+	return msg;
+}
+
+/* Decode Channel Type element */
+struct gsm0808_channel_type *gsm0808_dec_channel_type(const void *ctx,
+						      struct msgb *msg)
+{
+	struct gsm0808_channel_type *ct;
+	unsigned int i;
+	uint8_t byte;
+
+	OSMO_ASSERT(msg);
+
+	/* Malformed element */
+	if (msg->len < CHANNEL_TYPE_ELEMENT_MINLEN)
+		return NULL;
+
+	ct = talloc_zero(ctx, struct gsm0808_channel_type);
+	if (!ct)
+		return NULL;
+
+	ct->ch_indctr = msgb_pull_u8(msg) & 0x0f;
+	ct->ch_rate_type = msgb_pull_u8(msg) & 0x0f;
+
+	for (i = 0; i < ARRAY_SIZE(ct->perm_spch); i++) {
+		byte = msgb_pull_u8(msg);
+		ct->perm_spch[i] = byte & 0x7f;
+		if ((byte & 0x80) == 0x00)
+			break;
+	}
+	ct->perm_spch_len = i + 1;
+
+	return ct;
 }

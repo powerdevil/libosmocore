@@ -433,3 +433,11 @@ struct gsm0808_speech_codec {
 	bool type_extended;
 	bool cfg_present;
 };
+
+/* 3GPP TS 48.008 3.2.2.11 Channel Type */
+struct gsm0808_channel_type {
+	uint8_t ch_indctr;
+	uint8_t ch_rate_type;
+	uint8_t perm_spch[9];
+	unsigned int perm_spch_len;
+};

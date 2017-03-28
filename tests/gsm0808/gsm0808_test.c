@@ -582,6 +582,32 @@ static void test_gsm0808_enc_dec_speech_codec_list(const void *ctx)
 	msgb_free(msg);
 }
 
+static void test_gsm0808_enc_dec_channel_type(const void *ctx)
+{
+	struct gsm0808_channel_type ct;
+	struct msgb *ct_enc;
+	uint8_t ct_enc_expected[] = {0x01, 0x0b, 0xa1, 0x25};
+	struct gsm0808_channel_type *ct_dec;
+
+	memset(&ct,0,sizeof(ct));
+	ct.ch_indctr = GSM0808_CHAN_SPEECH;
+	ct.ch_rate_type = GSM0808_SPEECH_HALF_PREF;
+	ct.perm_spch[0] = GSM0808_PERM_FR3;
+	ct.perm_spch[1] = GSM0808_PERM_HR3;
+	ct.perm_spch_len = 2;
+
+	ct_enc = gsm0808_enc_channel_type(&ct);
+	OSMO_ASSERT(ct_enc);
+	OSMO_ASSERT(memcmp(ct_enc_expected,ct_enc->data,ct_enc->len) == 0);
+
+	ct_dec = gsm0808_dec_channel_type(ctx, ct_enc);
+	OSMO_ASSERT(ct_dec);
+	OSMO_ASSERT(memcmp(&ct,ct_dec,sizeof(ct)) == 0);
+
+	talloc_free(ct_dec);
+	msgb_free(ct_enc);
+}
+
 int main(int argc, char **argv)
 {
 	void *ctx;
@@ -611,6 +637,7 @@ int main(int argc, char **argv)
 	test_gsm0808_enc_dec_speech_codec_ext(ctx);
 	test_gsm0808_enc_dec_speech_codec_ext_with_cfg(ctx);
 	test_gsm0808_enc_dec_speech_codec_list(ctx);
+	test_gsm0808_enc_dec_channel_type(ctx);
 
 	printf("Done\n");
 
